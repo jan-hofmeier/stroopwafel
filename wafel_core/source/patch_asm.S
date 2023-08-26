@@ -1354,9 +1354,20 @@ str_read_write_print_format:
 .align 4
     
 
-
-
 wfs_crypto_hook:
+    ldrb r3, [lr,#0x19] @ replaced
+    push {r4-r5}
+    
+    @ set the key to 0xDEADBEEF to skip crypto
+    ldr r5, =0xDEADBEEF
+    ldr r4, [lr, #0x24]
+    str r5, [r4]
+    
+    pop {r4-r5}
+    b REL_WFS_CRYPTO_HOOK_RET_ADDR
+.align 4
+
+wfs_crypto_hook_org:
     ldrb r3, [lr,#0x19] @ replaced
 #if USB_SHRINKSHIFT
     push {r4-r7}
