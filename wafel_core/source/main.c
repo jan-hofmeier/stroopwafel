@@ -533,6 +533,79 @@ void call_plugin_entry(char *entry_name){
 
 static void patch_general()
 {
+    // Don't init SCFM
+    ASM_PATCH_K(0x107e7604, "mov r0, #0\nbx lr");
+    // Don't use SCFM
+    ASM_PATCH_K(0x107BD98C, "cmp r3,r3");
+    //ASM_PATCH_K(0x107BD99C, "nop"); //other patch is better
+    // Don't exit SCFM
+    ASM_PATCH_K(0x107e5fc8, "mov r0, #0\nbx lr");
+
+    //Don't attach SLCs to SAL
+    //ASM_PATCH_K(0x107b9508, "cmp r0,#42")
+
+    //Only attach slccmpt
+    //ASM_PATCH_K(0x107b9508, "cmp r10,#0");
+    //ASM_PATCH_K(0x107b965c, "cmp r10,#1");
+
+    //extern void slc_print_patch();
+    //BL_TRAMPOLINE_K(0x107ba834, slc_print_patch);
+
+    // BOOT_DEV_SDCARD
+    //ASM_T_PATCH_K(0x0501fc5a, "mov r2,#3");
+
+    // Set security level Debug
+    //ASM_T_PATCH_K(0x0501fc3a, "mov r5,#0x14");
+    ASM_T_PATCH_K(0x05027c74, "mov r6,#0x14");
+    //ASM_T_PATCH_K(0x05027f30, "mov r5,#0x14");
+
+    // BOOT_DEV_PCFS
+    ASM_T_PATCH_K(0x0501fc5a, "mov r2,#2");
+
+    extern void hfioslc_mount_param_patch();
+    BL_T_TRAMPOLINE_K(0x05027c7a, hfioslc_mount_param_patch);
+
+    extern void hfiomlc_mount_param_patch();
+    BL_T_TRAMPOLINE_K(0x05027f3a, hfiomlc_mount_param_patch);
+
+    extern void slc_mount_param_patch();
+    //BL_T_TRAMPOLINE_K(0x05027ca6, slc_mount_param_patch);
+
+    extern void slc_proc_mount_patch();
+    //BL_T_TRAMPOLINE_K(0x05015e04, slc_proc_mount_patch);
+
+    // Disable slccmpt mount
+    //ASM_T_PATCH_K(0x0500ff8a, "mov r0, #0\nnop")
+    //ASM_T_PATCH_K(0x0500ff96, "mov r0, #0\nnop")
+
+    extern void slccmpt_mount_patch();
+    //BL_T_TRAMPOLINE_K(0x0500ff8a, slccmpt_mount_patch);
+
+    extern void print_mount_patch();
+    BL_T_TRAMPOLINE_K(0x05015c90, print_mount_patch);
+
+
+    //ASM_PATCH_K(0x1071e39c, "mov r1,#1");
+    //ASM_PATCH_K(0x1071f8d8, "mov r0,#1");
+
+    // volatile char *old = *((volatile char**)0x05027ddc);
+    // // Replace pointer to "/dev/slc01" string
+    // *((volatile char**)0x05027ddc) = "/dev/sdcard01";
+    // debug_printf("REPLACE SLC: old: %p, new: %p\n", old, *((volatile char**)0x05027ddc));
+
+    // debug_printf("REPLACE SLC: old: %s, new: %s\n", old, *((volatile char**)0x05027ddc));
+
+    // Increase Timeout
+    //*((u32*)0x05027de0) = 60000000;
+
+    // Use "/dev/mlc01" instead of "/dev/slc01"
+    //ASM_T_PATCH_K(0x05027ca6,"ldr r5, [pc, #0x05027df8-0x05027ca6-2]");
+
+    // Use "ys" instead of "sys" in mount bind
+    //ASM_T_PATCH_K(0x05027cc4,"add r1, r6, #1");
+
+
+
     // KERNEL
     {
 #if OTP_IN_MEM

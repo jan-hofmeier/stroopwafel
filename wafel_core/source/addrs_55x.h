@@ -78,6 +78,8 @@
 #define FS_GET_FULL_DIR_STR         (0x1070E91C)
 //#define FS_REGISTER_FS_DRIVER  0x10732D70
 
+#define MCP_MountWithSubdir         (0x05015C7C)
+
 #define FSA_BASE (0x10700000)
 #define REL_FS(addr) (addr - FSA_BASE + (FSA_BASE-FS_ALT_BASE))
 #define REL_FS_SYSLOG_OUTPUT REL_FS(FS_SYSLOG_OUTPUT)

@@ -1406,9 +1406,20 @@ str_read_write_print_format:
 .align 4
     
 
-
+str_crypto_hook_print_format:
+.ascii "WFS CRPYTO: Name: %X, sector count: %u, mode: %X"
+.byte 0xA,0
+.align 4
 
 wfs_crypto_hook:
+    @ push {r0-r2,lr}
+    @ adr r0, str_crypto_hook_print_format
+    @ mov r1, r2
+    @ mov r2, r5
+    @ mov r3, r12
+    @ bl debug_printf
+    @ pop {r0-r2,lr}
+
     ldrb r3, [lr,#0x19] @ replaced
 #if USB_SHRINKSHIFT | NO_CRYPTO
     push {r4-r7}
@@ -1955,9 +1966,127 @@ slcWrite2_patch_cont:
     add sp, #0x14
     pop {r1-r4,pc}
 
+.global slccmpt_mount_patch
+.global slc_proc_mount_patch
+.thumb
+slccmpt_mount_patch:
+    add r1, r2, #5 @compat_slc
+slc_proc_mount_patch:
+    ldr r0,=#MCP_MountWithSubdir|1
+    mov r12, r0
+    adr r0, slc_dev_replacement
+    bx r12 
+.arm
+
+.align 0x4
+
+.global slc_mount_param_patch
+.thumb
+slc_mount_param_patch:
+    ldr r1,=#60000000 
+    adr r5, slc_dev_replacement
+    bx lr
+.align 0x4
+slc_dev_replacement:
+    .ascii "/dev/sdcard01"
+    .byte 0
+.arm
+
+.align 0x4
+
+.global slc_print_patch
+slc_print_patch:
+    mov r12,#0x0 @org ins
+    bx lr
+    push {lr}
+    adr r0, slc_print_fmt
+    mov r1, #0x2a
+    add r2,r10, r1
+    ldr r12,=debug_printf
+    blx r12
+    adr r0, slc_print_fmt
+    mov r1, #0x3a
+    add r2,r10, r1
+    ldr r12,=debug_printf
+    blx r12
+    mov r12,#0x0 @org ins
+    pop {pc}
+
+slc_print_fmt:
+    .ascii "SLC ATTACH 0x%x: %s"
+    .byte 0xA,0
+
+.align 0x4
+
+.global hfioslc_mount_param_patch
+.thumb
+hfioslc_mount_param_patch:
+    adr r5, hfio_dev_replacement
+    ldr r1,=#60000000
+    bx lr
+.align 4
+hfio_dev_replacement:
+    .ascii "/dev/sdcard01"
+    .byte 0
+.arm
+.align 4
+
+.global hfiomlc_mount_param_patch
+.thumb
+hfiomlc_mount_param_patch:
+    adr r0, hfiomlc_dev_replacement
+    mov r1,#0
+    bx lr
+.align 4
+hfiomlc_dev_replacement:
+    .ascii "/dev/mlc01"
+    .byte 0
+.arm
+.align 4
+
 @ @ @ @ @ @ @ @ @ @
 @   DEBUG STUFF   @
 @ @ @ @ @ @ @ @ @ @
+
+.global print_mount_patch
+.thumb
+print_mount_patch:
+    add  r7,sp,#0x20 @orig ins
+    mov  r11,r7      @orig ins
+    @bx lr
+    push {r0-r3,lr}
+    mov r3,r2
+    mov r2,r1
+    mov r1,r0
+    cmp r3, #0
+    bne print_mount_patch_1
+    adr r3, empty_str
+print_mount_patch_1:
+    cmp r2, #0
+    bne print_mount_patch_2
+    adr r2, empty_str
+print_mount_patch_2:
+    cmp r1, #0
+    bne print_mount_patch_3
+    adr r1, empty_str
+print_mount_patch_3:
+    adr r0, mount_print_fmt
+    ldr r7, =debug_printf
+    blx r7
+    pop {r0-r3,pc}
+
+.arm
+.align 0x4
+mount_print_fmt:
+    .ascii "MCP_MountWithSubdir(%s,%s,%s)"
+    .byte 0xA,0
+.align 0x4
+empty_str:
+    .ascii "(null)"
+    .byte 0
+
+.align 0x4
+
 
 mlcRead1_dbg:
 .equ mlcRead1_dbg_stackframe, (4*6)
