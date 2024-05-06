@@ -31,6 +31,9 @@ bool disable_scfm = false;
 bool scfm_on_slccmpt = false;
 
 u32 redmlc_off_sectors = 0;
+u32 sysmlc_sectors = 0;
+u32 mlc_crypto_handle = 0;
+int *sysmlc_handle = NULL;
 
 static bool hai_from_mlc(void){
     return hai_getdev() == DEVTYPE_MLC;
@@ -99,6 +102,24 @@ void rednand_register_sd_as_mlc(trampoline_state* state){
         sal_handle = FSSCFM_Attach_fun(sal_attach_device_arg);
     red_mlc_server_handle[0x82] = sal_handle;
     debug_printf("Attaching sdcard as mlc returned %d\n", sal_handle);
+
+    debug_printf("Sysmlc handle %p\n", sysmlc_handle);
+    if(sysmlc_handle){
+        sysmlc_handle[4] = 17;
+        sysmlc_handle[0x82] = 0;
+        //TODO make this work with scfm
+        int res = FSSAL_attach_device_fun(sysmlc_handle+3);
+        sysmlc_handle[0x82] = res;
+        //int res = FSSCFM_Attach_fun(sysmlc_handle);
+        debug_printf("Attaching sysmlc returned %d\n", res);
+    }
+}
+
+static int sysmlc_attach_hook(int *attach_arg){
+    sysmlc_handle = attach_arg -3;
+    sysmlc_sectors = sysmlc_handle[0xe];
+    debug_printf("Delay attaching of sysmlc %p with %d sectors\n", sysmlc_handle, sysmlc_sectors);
+    return -1;
 }
 
 static void print_attach(trampoline_state *s){
@@ -123,8 +144,15 @@ static void print_state(trampoline_state *s){
 static void redmlc_crypto_disable_hook(trampoline_state* state){
     // hope that 0x11 stays constant for mlc
     if(state->r[5] == redmlc_size_sectors){
+        mlc_crypto_handle = state->r[0];
+        //debug_printf("MLC crypto handle %d\n", mlc_crypto_handle);
         // tells crypto to not do crypto (depends on stroopwafel patch)
         state->r[0] = 0xDEADBEEF;
+    }
+    if(state->r[5] == sysmlc_sectors){
+        debug_printf("replace sysMLC crypto handle %d with %d\n", state->r[0], mlc_crypto_handle);
+        // tells crypto to not do crypto (depends on stroopwafel patch)
+        state->r[0] = mlc_crypto_handle;
     }
 }
 
@@ -138,8 +166,10 @@ static void rednand_apply_mlc_patches(bool nocrypto){
     //trampoline_hook_before(0x107bd7a0, print_attach);
 
     // Don't attach eMMC
-    trampoline_hook_before(0x107bd754, skip_mlc_attch_hook);
-    ASM_PATCH_K(0x107bdae0, "mov r0, #0xFFFFFFFF\n"); //make extra sure mlc doesn't attach
+    //trampoline_hook_before(0x107bd754, skip_mlc_attch_hook);
+    //ASM_PATCH_K(0x107bdae0, "mov r0, #0xFFFFFFFF\n"); //make extra sure mlc doesn't attach
+
+    trampoline_blreplace(0x107bdae0, sysmlc_attach_hook);
    
     trampoline_hook_before(0x107bd9a8, rednand_register_sd_as_mlc);
 
@@ -149,6 +179,7 @@ static void rednand_apply_mlc_patches(bool nocrypto){
         trampoline_hook_before(0x10740fe8, redmlc_crypto_disable_hook); // hook encrypt call
     }
 }
+
 
 static void rednand_apply_slc_patches(void){
     debug_printf("Enabeling SLC/SLCCMPT redirection\n");
@@ -204,10 +235,10 @@ static void rednand_apply_slc_patches(void){
 
 static void apply_scfm_disable_patches(void){
     debug_printf("Disabeling SCFM\n");
-    ASM_PATCH_K(FSSCFMInit, "bx lr");
-    ASM_PATCH_K(FSSCFMExit, "bx lr");
+    //ASM_PATCH_K(FSSCFMInit, "bx lr");
+    //ASM_PATCH_K(FSSCFMExit, "bx lr");
     // change call to SCFM attach (in case MLC redirection is not enabled)
-    BL_TRAMPOLINE_K(0x107bdae0, FSSAL_attach_device);
+    //BL_TRAMPOLINE_K(0x107bdae0, FSSAL_attach_device);
 }
 
 
