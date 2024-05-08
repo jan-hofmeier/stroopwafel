@@ -190,6 +190,26 @@ static void wfs_attach_hook8(trampoline_state *s){
     }
 }
 
+static void wfs_attach_hook9(trampoline_state *s){
+    debug_printf("uVar5: %d\n", s->r[6]);
+}
+
+static void wfs_attach_hook10(trampoline_state *s){
+    debug_printf("FUN_10750be0 returned: %d\n", s->r[0]);
+}
+
+static void wfs_attach_hook11(trampoline_state *s){
+    debug_printf("iVar1: %d\n", s->r[12]);
+}
+
+static void fun1074b974_hook(trampoline_state *s){
+    debug_printf("FUN_1074b974 returned: %d\n", s->r[0]);
+}
+
+static void FUN_1074e2e8_hook(trampoline_state *s){
+    debug_printf("FUN_1074e2e8 returned: %d\n", s->r[0]);
+}
+
 static void rednand_apply_mlc_patches(bool nocrypto, bool mount_sys){
     debug_printf("Enabeling MLC redirection\n");
     //patching offset for HAI on MLC in companion file
@@ -208,13 +228,21 @@ static void rednand_apply_mlc_patches(bool nocrypto, bool mount_sys){
     trampoline_hook_before(0x1073ce90, wfs_attach_hook7);
     trampoline_hook_before(0x1073ce18, wfs_attach_hook8);
 
+    trampoline_hook_before(0x1073cc9c, wfs_attach_hook9);
+    trampoline_hook_before(0x1073ccb4, wfs_attach_hook10);
+    trampoline_hook_before(0x1073ccd8, wfs_attach_hook11);
+
+    trampoline_hook_before(0x10750ad4, fun1074b974_hook);
+    trampoline_hook_before(0x10750b18, FUN_1074e2e8_hook);
+    trampoline_hook_before(0x10750bd0, FUN_1074e2e8_hook);
+
     if(mount_sys){
-        // // change mlc type to mlc_orig (18)
-        // ASM_PATCH_K(0x107bdb00, "mov r3, #18");
-        // // allow mlc_orig for wfs
-        // trampoline_blreplace(0x1073cab4, rednand_add_mlcorig_sal_allowed_device);
-        // // make SCFM look for mlc_orig instead of mlc
-        // ASM_PATCH_K(0x107d1f40, "cmp r3, #18");
+        // change mlc type to mlc_orig (18)
+        ASM_PATCH_K(0x107bdb00, "mov r3, #18");
+        // allow mlc_orig for wfs
+        trampoline_blreplace(0x1073cab4, rednand_add_mlcorig_sal_allowed_device);
+        // make SCFM look for mlc_orig instead of mlc
+        ASM_PATCH_K(0x107d1f40, "cmp r3, #18");
     } else {
         // Don't attach eMMC
         trampoline_hook_before(0x107bd754, skip_mlc_attch_hook);
