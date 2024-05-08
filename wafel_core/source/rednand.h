@@ -7,6 +7,7 @@
 #define DEVTYPE_MLC 5
 #define DEVTYPE_SD 6
 #define DEVTYPE_USB 17
+#define DEVTYPE_MLCORIG 18
 
 extern u32 redmlc_off_sectors;
 extern u32 redmlc_size_sectors;

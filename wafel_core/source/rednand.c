@@ -84,7 +84,7 @@ void rednand_register_sd_as_mlc(trampoline_state* state){
     red_mlc_server_handle[0x76] = (int)redmlc_read_wrapper;
     red_mlc_server_handle[0x78] = (int)redmlc_write_wrapper;
     //red_mlc_server_handle[3] = (int) red_mlc_server_handle;
-    red_mlc_server_handle[5] = DEVTYPE_MLC; // set device typte to mlc
+    red_mlc_server_handle[5] =  DEVTYPE_MLC; // set device typte to mlc
     //adding + 0xFFFF would be closter to the original behaviour
     //red_mlc_server_handle[0xa] = redmlc_size_sectors + 0xFFFF;
     // -1 makes more sense and I don't like addressing outside the partition
@@ -128,7 +128,69 @@ static void redmlc_crypto_disable_hook(trampoline_state* state){
     }
 }
 
-static void rednand_apply_mlc_patches(bool nocrypto){
+struct SALAddFilesystemArg {
+    void *setup_cb;
+    void *unk_cb;
+    void *attach_cb;
+    u8 allowed_devices[12];
+} PACKED typedef SALAddFilesystemArg;
+
+static int rednand_add_mlcorig_sal_allowed_device(SALAddFilesystemArg *fsArg, int r1, int r2, int r3, int (*FSSAL_AddFilesystem)(SALAddFilesystemArg*)){
+    int i = 0;
+    while(fsArg->allowed_devices[i])
+        i++;
+    fsArg->allowed_devices[i++] = DEVTYPE_MLCORIG;
+    fsArg->allowed_devices[i] = 0;
+    return FSSAL_AddFilesystem(fsArg);
+}
+
+struct FSSALHandle {
+    u8 type;
+    u8 index;
+    u16 generation;
+} PACKED typedef  FSSALHandle;
+
+static void wfs_attach_hook1(trampoline_state *s){
+    FSSALHandle handle = *(FSSALHandle*) &s->r[0];
+    debug_printf("GetDeviceParams: %08X type: %d, index: %d, generation %d\n", 
+                    s->r[0], handle.type, handle.index, handle.generation );
+}
+
+static void wfs_attach_hook2(trampoline_state *s){
+    debug_printf("FSWFS_InitDeviceParams\n");
+}
+
+static void wfs_attach_hook3(trampoline_state *s){
+    debug_printf("FUN_10750c30\n");
+}
+
+static void wfs_attach_hook4(trampoline_state *s){
+    debug_printf("FUN_107515c0\n");
+}
+
+static void wfs_attach_hook5(trampoline_state *s){
+    debug_printf("FUN_10750888\n");
+}
+
+static void wfs_attach_hook6(trampoline_state *s){
+    debug_printf("FUN_1073d350\n");
+}
+
+static void wfs_attach_hook7(trampoline_state *s){
+    debug_printf("Flags: %d\n", s->r[3]);
+}
+
+static void wfs_attach_hook8(trampoline_state *s){
+    int *piVar6 = (int*) s->r[2];
+    int uVar9 = s->r[9];
+    debug_printf("piVar: %p, piVar6[0]: %d, piVar6[-2]: %d, uVar9 %u\n", piVar6, piVar6[0], piVar6[-2], uVar9);
+    if(uVar9 == 1 && piVar6[-2] == 3) {
+        piVar6[-2] = 1; 
+        debug_printf("make mlc wfs slot from usb slot\n");
+    }
+}
+
+static void rednand_apply_mlc_patches(bool nocrypto, bool mount_sys){
     debug_printf("Enabeling MLC redirection\n");
     //patching offset for HAI on MLC in companion file
     trampoline_t_hook_before(0x050078AE, hai_write_file_patch);
@@ -137,9 +199,27 @@ static void rednand_apply_mlc_patches(bool nocrypto){
 
     //trampoline_hook_before(0x107bd7a0, print_attach);
 
-    // Don't attach eMMC
-    trampoline_hook_before(0x107bd754, skip_mlc_attch_hook);
-    ASM_PATCH_K(0x107bdae0, "mov r0, #0xFFFFFFFF\n"); //make extra sure mlc doesn't attach
+    trampoline_hook_before(0x1073cbe8, wfs_attach_hook1);
+    trampoline_hook_before(0x1073cc50, wfs_attach_hook2);
+    trampoline_hook_before(0x1073cc84, wfs_attach_hook3);
+    trampoline_hook_before(0x1073ccf4, wfs_attach_hook4);
+    trampoline_hook_before(0x1073cf0c, wfs_attach_hook5);
+    trampoline_hook_before(0x1073ce9c, wfs_attach_hook6);
+    trampoline_hook_before(0x1073ce90, wfs_attach_hook7);
+    trampoline_hook_before(0x1073ce18, wfs_attach_hook8);
+
+    if(mount_sys){
+        // // change mlc type to mlc_orig (18)
+        // ASM_PATCH_K(0x107bdb00, "mov r3, #18");
+        // // allow mlc_orig for wfs
+        // trampoline_blreplace(0x1073cab4, rednand_add_mlcorig_sal_allowed_device);
+        // // make SCFM look for mlc_orig instead of mlc
+        // ASM_PATCH_K(0x107d1f40, "cmp r3, #18");
+    } else {
+        // Don't attach eMMC
+        trampoline_hook_before(0x107bd754, skip_mlc_attch_hook);
+        ASM_PATCH_K(0x107bdae0, "mov r0, #0xFFFFFFFF\n"); //make extra sure mlc doesn't attach
+    }
    
     trampoline_hook_before(0x107bd9a8, rednand_register_sd_as_mlc);
 
@@ -230,6 +310,8 @@ void rednand_init(rednand_config* rednand_conf, size_t config_size){
     disable_scfm = rednand_conf->disable_scfm;
     scfm_on_slccmpt = rednand_conf->scfm_on_slccmpt;
 
+    bool mount_sys_mlc = true;
+
     if(config_size>sizeof(rednand_config)){
         debug_printf("WARNING: newer rednand config detected, not all features are supported in this stroopwafel!!!\n");
     }
@@ -241,7 +323,7 @@ void rednand_init(rednand_config* rednand_conf, size_t config_size){
         debug_printf("Old redNAND config detected\n");
     }
 
-    if(disable_scfm){
+    if(disable_scfm && !mount_sys_mlc){
         // needs to run before the mlc patches
         apply_scfm_disable_patches();
     }
@@ -251,7 +333,7 @@ void rednand_init(rednand_config* rednand_conf, size_t config_size){
     }
     if(redmlc_size_sectors){
         debug_printf("mlc_nocrpyto: %d\n", mlc_nocrypto);
-        rednand_apply_mlc_patches(mlc_nocrypto);
+        rednand_apply_mlc_patches(mlc_nocrypto, mount_sys_mlc);
     }
     
     if(scfm_on_slccmpt){
